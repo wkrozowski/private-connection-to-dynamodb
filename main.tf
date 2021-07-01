@@ -99,7 +99,7 @@ resource "aws_vpc_endpoint_route_table_association" "private-dynamodb" {
 resource "aws_instance" "web" {
   ami                    = data.aws_ami.amazon_linux.id
   instance_type          = "t2.micro"
-  user_data              = file("init-script.sh")
+  user_data              = file("init_script.sh")
   vpc_security_group_ids = [aws_security_group.web-sg.id]
   subnet_id              = module.vpc.public_subnets[0]
   key_name               = aws_key_pair.kp.key_name
