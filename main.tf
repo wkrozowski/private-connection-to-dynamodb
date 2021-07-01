@@ -42,6 +42,13 @@ resource "aws_security_group" "web-sg" {
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
+  ingress {
+    description = "SSH"
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
 
   egress {
     from_port   = 0
@@ -51,13 +58,49 @@ resource "aws_security_group" "web-sg" {
   }
 }
 
+data "aws_ami" "amazon_linux" {
+  most_recent = true
+  owners      = ["amazon"]
 
+  filter {
+    name   = "name"
+    values = ["amzn2-ami-hvm-*-x86_64-gp2"]
+  }
+}
 
-# resource "aws_instance" "data_collector_service" {
-#   ami           = "ami-830c94e3"
-#   instance_type = "t2.micro"
+resource "tls_private_key" "pk" {
+  algorithm = "RSA"
+  rsa_bits  = 4096
+}
 
-#   tags = {
-#     Name = "DataCollectorService"
-#   }
-# }
+resource "aws_key_pair" "kp" {
+  key_name   = "myKey"       # Create "myKey" to AWS!!
+  public_key = tls_private_key.pk.public_key_openssh
+
+  provisioner "local-exec" { # Create "myKey.pem" to your computer!!
+    command = "echo '${tls_private_key.pk.private_key_pem}' > ./myKey.pem"
+  }
+}
+
+resource "aws_vpc_endpoint" "dynamodb" {
+  vpc_id       = module.vpc.vpc_id
+  service_name = "com.amazonaws.us-east-1.dynamodb"
+}
+
+  resource "aws_vpc_endpoint_route_table_association" "private-dynamodb" {
+    vpc_endpoint_id = resource.aws_vpc_endpoint.dynamodb.id
+    route_table_id  = module.vpc.vpc_main_route_table_id
+  }
+
+resource "aws_instance" "web" {
+  ami           = data.aws_ami.amazon_linux.id
+  instance_type = "t2.micro"
+  user_data     = file("init-script.sh")
+  vpc_security_group_ids = [aws_security_group.web-sg.id]
+  subnet_id = module.vpc.public_subnets[0]
+  key_name      = aws_key_pair.kp.key_name
+
+  tags = {
+    Name = "public-instance"
+  }
+}
